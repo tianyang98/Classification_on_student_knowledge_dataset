@@ -1,0 +1,730 @@
+---
+title: "main"
+author: "Shutong Jin"
+date: "2019/12/18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1.Naive Bayes
+
+```{r}
+library(caret)
+library(e1071)
+load(file='user_knowledge.rda')
+train.input=train[1:5]
+train.target=train[6]
+test.input=test[1:5]
+test.output=test[6]
+```
+
+```{r}
+plot(train.input)
+plot(train[1:6])
+```
+
+
+```{r}
+library(naivebayes)
+newNBclassifier=naive_bayes(UNS~STG+SCG+STR+LPR+PEG,usekernel=T, data=train)
+newNBclassifier
+```
+
+```{r}
+trainPred=predict(newNBclassifier, newdata = train.input, type = "class")
+trainTable=table(train$UNS, trainPred)
+trainAcc=(trainTable[1,1]+trainTable[2,2]+trainTable[3,3]+trainTable[4,4])/sum(trainTable)
+testPred=predict(newNBclassifier, newdata=test.input, type="class")
+testTable=table(test$UNS, testPred)
+testAcc=(testTable[1,1]+testTable[2,2]+testTable[3,3]+test[4,4])/sum(testTable)
+message("Contingency Table for Training Data")
+print(trainTable)
+message("Contingency Table for Test Data")
+print(testTable)
+message("Accuracy")
+print(round(cbind(trainAccuracy=trainAcc, testAccuracy=testAcc),3))
+```
+
+## 2.k-NN
+
+
+```{r}
+train.input <- train[1:5]
+train.target <- train[6]
+test.input <- test[1:5]
+test.target <- test[6]
+cl = train.target[,1]
+test.target = test.target[,1]
+```
+
+Use Euclidean Distance as metric:
+
+```{r}
+library(class)
+i=1
+k.optm=1
+for (i in 1:20){
+  knn.mod_eu <- knn(train.input,test.input,cl,k=i)
+  k.optm[i] <- 100 * sum(test.target == knn.mod_eu)/NROW(test.target)
+  k=i
+  cat(k,'=',k.optm[i],'
+      ')
+}
+plot(k.optm, type="b", xlab="K- Value",ylab="Accuracy level")
+```
+```{r}
+library(class)
+knn.mod_eu <- knn(train[1:5],test[1:5],train[7][,1],k=5)
+```
+
+
+```{r}
+library(caret)
+cm <- confusionMatrix(as.factor(knn.mod_eu), as.factor(test[7][,1]))
+cm[["byClass"]][ , "Sensitivity"]
+```
+```{r}
+sum(test[7][,1] == knn.mod_eu)/NROW(test[7][,1])
+```
+
+### After oversampling the data: 
+
+```{r}
+library(DMwR)
+data=train[,c(1,2,3,4,5,7)]
+table(data$UNS)
+newData <- SMOTE(UNS~ .,data,perc.under = 690, K=5)
+##newData <- SMOTE(UNS~ ., data)
+table(newData$UNS)
+```
+
+
+```{r}
+knn2 <- knn(newData[1:5],test[1:5],newData[6][,1],k=3)
+```
+
+## new result:
+```{r}
+cm <- confusionMatrix(as.factor(knn2), as.factor(test[7][,1]))
+cm[["byClass"]][ , "Sensitivity"]
+```
+
+```{r}
+sum(test[7][,1] == knn2)/NROW(test[7][,1])
+```
+
+```{r}
+x <- data.frame("k-value"=c(1,3,5,7),"Pencentages_of_Average_Error_Rates"=c(100-k.optm[1],100-k.optm[3],100-k.optm[5],100-k.optm[7]))
+```
+
+
+Use MANHATTAN DISTANCE as metric:
+
+```{r}
+library(kknn)
+i=1
+k.optm=1
+for (i in 1:20){
+  knn.mod <- kknn(y~STG + SCG + STR + LPR + PEG,train,test,k=i,distance=1,kernel="rectangular")
+  fit <- fitted(knn.mod)
+  k.optm[i] <- 100 * sum(test.target == fit)/NROW(test.target)
+  k=i
+  cat(k,'=',k.optm[i],'
+      ')
+}
+plot(k.optm, type="b", xlab="K- Value",ylab="Accuracy level")
+```
+
+
+Use MINKOWSKI DISTANCE as metric (m=0.5)
+
+```{r}
+i=1
+k.optm=1
+for (i in 1:20){
+  knn.mod <- kknn(y~STG + SCG + STR + LPR + PEG,train,test,k=i,distance=1.414,kernel="rectangular")
+  fit <- as.integer(fitted(knn.mod))
+  k.optm[i] <- 100 * sum(test.target == fit)/NROW(test.target)
+  k=i
+  cat(k,'=',k.optm[i],'
+      ')
+}
+plot(k.optm, type="b", xlab="K- Value",ylab="Accuracy level")
+```
+
+```{r}
+i=1
+k.optm=1
+for (i in 1:20){
+  knn.mod <- kknn(y~.,train,test,k=i,distance=0.75,kernel = "rectangular")
+  fit <- fitted(knn.mod)
+  k.optm[i] <- 100 * sum(test.target == fit)/NROW(test.target)
+  k=i
+  cat(k,'=',k.optm[i],'
+      ')
+}
+plot(k.optm, type="b", xlab="K- Value",ylab="Accuracy level")
+```
+
+## 3. GA-based k-NN (using package)
+
+```{r}
+library(TSdist)
+library(class)
+#library(gatbxr)
+library(mclust)
+library(GA)
+load("~/Downloads/user_knowledge.rda")
+```
+
+
+```{r}
+dataset=train[,1:5]
+lab=train[,6]
+ob_len=26
+  id=runif(ob_len)*dim(dataset)[1]+1
+  id=as.integer(id)
+  ob_set=dataset[id,]
+  ob_lab=lab[id]
+  ob_set
+```
+```{r cars}
+Dist_EU <- function(x1,x2,weight){
+  #cat(dim(x1),' ',dim(x2),' ',dim(weight))
+  y2=(x1-x2)^2
+  y2=y2*weight
+  y2=sum(y2)
+  y2=sqrt(y2)
+  
+  return (y2);
+}
+```
+
+```{r}
+knn_classify<-function(w,x,lab,k){
+  dist=rep(0,dim(ob_set)[1])
+  for(jj in (1:dim(ob_set)[1])){
+    dist[jj]=Dist_EU(ob_set[jj,],x,weight=w)
+  }
+  
+  od=order(dist)
+  vote=rep(0,5)
+  #print(vote)
+  voting=ob_lab[which(od>=24)]
+  for (i in voting){
+    vote[i+1]=vote[i+1]+1
+  }
+  #print(vote)
+  res=which.max(vote)-1
+ # print(res)
+  if(lab==res){
+    return(0)
+  }
+  return(1)
+}
+```
+
+```{r}
+knn_train<-function(w,k=3){
+  
+  error_num=0
+  for (jj in 1:dim(dataset)[1]){
+    res=knn_classify(w,dataset[jj,],lab[jj],k)
+    error_num=error_num+res
+  }
+  return(1.0/error_num)
+}
+#knn_train(w=rep(1,5),dataset=train[1:3,1:5],lab=train[1:3,6])
+```
+
+```{r}
+fitness<-function(w){
+ # print(w)
+  error=knn_train(w)
+  
+  return(1.0/error)
+}
+```
+
+
+
+```{r}
+lbound <- -10; ubound <- 10
+GA <- ga(type = "real-valued", fitness = fitness, lower = c(th = lbound), upper = ubound)
+summary(GA)
+```
+
+## 3. GA-based k-NN (without package)
+
+```{r}
+library(TSdist)
+library(class)
+library(gatbxr)
+library(mclust)
+load("user_knowledge.rda")
+```
+
+```{r cars}
+Dist_EU <- function(x1,x2,weight){
+  #cat(dim(x1),' ',dim(x2),' ',dim(weight))
+  y2=(x1-x2)^2
+  y2=y2*weight
+  y2=sum(y2)
+  y2=sqrt(y2)
+  
+  return (y2);
+}
+```
+
+```{r}
+train[1:5,1]
+```
+
+```{r}
+train[1:5,3]
+Dist_EU(train[1:5,1],train[1:5,3],weight=c(1,2,3,4,5))
+```
+
+```{r}
+  dataset=train[,1:5]
+  lab=train[,6]
+  ob_len=26
+  id=runif(ob_len)*dim(dataset)[1]+1
+  id=as.integer(id)
+  ob_set=dataset[id,]
+  ob_lab=lab[id]
+```
+
+
+```{r}
+knn_classify<-function(w,x,ob,lab,ob_lab,k){
+  dist=rep(0,dim(ob)[1])
+  for(jj in (1:dim(ob)[1])){
+    dist[jj]=Dist_EU(ob[jj,],x,weight=w)
+  }
+  
+  od=order(dist)
+  vote=rep(0,5)
+  #print(vote)
+  boud=dim(ob)[1]+1-k
+  boud=as.integer(boud)
+  voting=ob_lab[which(od>=24)]
+  for (i in voting){
+    vote[i+1]=vote[i+1]+1
+  }
+  #print(vote)
+  res=which.max(vote)-1
+ # print(res)
+  if(lab==res){
+    return(0)
+  }
+  return(1)
+}
+```
+
+```{r}
+knn_train<-function(w,dataset,lab,k=3){
+  
+  error_num=0
+  for (jj in 1:dim(dataset)[1]){
+    res=knn_classify(w,dataset[jj,],ob_set,lab[jj],ob_lab,k)
+    error_num=error_num+res
+  }
+  return(1.0/error_num)
+}
+knn_train(w=rep(1,5),dataset=train[1:3,1:5],lab=train[1:3,6])
+```
+
+```{r}
+fitness<-function(w,knn_data,lab,k){
+ # print(w)
+  error=knn_train(w,knn_data,lab,k)
+  
+  return(1.0/error)
+}
+```
+
+```{r}
+ga<-function(data,lab,dist="EU",k=1){
+  feature_dim=dim(data)[2]
+  l=dim(data)[1];
+  h=15;
+  pikc=data[1:h,]
+  pikc$fitness<-0;
+  U=data
+  it=100
+  for (tt in 1:h){
+      pikc[tt,]=c(runif(feature_dim),0)
+      pikc[tt,]=pikc[tt,]/sum(pikc[tt,])
+      weight=pikc[tt,1:feature_dim]
+      #print(weight)
+      pikc[tt,]$fitness=knn_train(weight,data[,1:5],lab,k)
+  }
+ for (qq in 1:it){
+    prev_h=h
+    for (tt in 1:2){
+      parents = rws(pikc[,6],2)
+      child=pikc[1,]
+      child[,1:3]=pikc[parents[1],1:3]
+      child[,4:5]=pikc[parents[2],4:5]
+      pikc[h+1,]=child
+      h=h+1
+    }
+    for (tt in prev_h+1:h){
+      pikc[tt,]=c(runif(feature_dim),0)
+      pikc[tt,]=pikc[tt,]/sum(pikc[tt,])
+      weight=pikc[tt,1:feature_dim]
+      pikc[tt,]$fitness=fitness(weight,data[,1:5],lab,k)
+      cat(tt,' ',pikc[tt,]$fitness,'\n')
+    }
+ }
+  #print(pikc)
+  return(pikc)
+}
+```
+
+```{r}
+pikc=ga(train[,1:5],train[,6])
+#print(pikc)
+```
+
+## 4. Tree-based methods
+
+```{r}
+library(rpart)
+fit <- rpart(y ~ STG + SCG + STR + LPR + PEG,method="class", data=train)
+```
+
+```{r}
+printcp(fit)
+```
+
+```{r}
+plot(fit, uniform=TRUE, main="Classification Tree for intuitive knowledge classifier")
+text(fit, use.n=TRUE, all=TRUE, cex=.8)
+```
+
+```{r}
+result <- predict(fit,test[1:5],type="class") 
+sum(test$y == result)/NROW(test$y)
+```
+
+```{r}
+library(caret)
+cm <- confusionMatrix(as.factor(result), as.factor(test$y))
+cm[["byClass"]][ , "Sensitivity"]
+```
+
+
+Prune (find cp which has minimun xerror)
+
+```{r}
+pfit <- prune(fit, cp=fit$cptable[which.min(fit$cptable[,"xerror"]),"CP"]) 
+plot(pfit, uniform=TRUE,main="Pruned Classification Tree for Kyphosis")
+text(pfit, use.n=TRUE, all=TRUE, cex=.8)
+```
+After pruning, it's the same as before.
+
+```{r}
+
+i=1
+result_=1
+for (i in 1:20){
+  fit_ <- rpart(y ~ STG + SCG + STR + LPR + PEG,method="class", data=train,control=rpart.control(minsplit=i,cp=0.001))
+  result_[i] <- 100 * sum(test$y == predict(fit_,test[1:5],type="class") )/NROW(test$y)
+  k=i
+  cat(k,'=',result_[i],'
+      ')
+}
+plot(result_, type="b", xlab="minsplit",ylab="Accuracy level")
+
+
+```
+
+```{r}
+result_[which.max(result_)]
+```
+
+```{r}
+fit_ <- rpart(y ~ STG + SCG + STR + LPR + PEG,method="class", data=train,control=rpart.control(minsplit=5,cp=0.001))
+library(caret)
+cm <- confusionMatrix(as.factor(predict(fit_,test[1:5],type="class")), as.factor(test$y))
+cm[["byClass"]][ , "Sensitivity"]
+```
+
+
+## Random Forest
+
+```{r}
+library(randomForest)
+library(caret)
+library(e1071)
+#rf <- randomForest(y ~ STG + SCG + STR + LPR + PEG, data=train, ntree=100, proximity=TRUE)
+```
+
+```{r}
+trControl <- trainControl(method = "cv",
+    number = 10,
+    search = "grid")
+set.seed(1234)
+# Run the model
+rf_default <- train(UNS ~ STG + SCG + STR + LPR + PEG,
+    data = train,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+# Print the results
+print(rf_default)
+```
+The algorithm uses 500 trees and tested three different values of mtry: 2, 3, 5.
+
+```{r}
+prediction_de <-predict(rf_default, test)
+confusionMatrix(prediction_de, as.factor(test$UNS))
+```
+
+
+The final value used for the model was mtry = 3 with an accuracy of 0.95. Let's try to get a higher score.
+
+```{r}
+set.seed(1234)
+tuneGrid <- expand.grid(.mtry = c(1: 10))
+rf_mtry <- train(UNS ~ STG + SCG + STR + LPR + PEG,
+    data = train,
+    method = "rf",
+    metric = "Accuracy",
+    tuneGrid = tuneGrid,
+    trControl = trControl,
+    importance = TRUE,
+    nodesize = 14,
+    ntree = 300)
+print(rf_mtry)
+```
+
+```{r}
+best_mtry <- rf_mtry$bestTune$mtry 
+best_mtry
+```
+
+## Search the best maxnodes
+
+```{r}
+store_maxnode <- list()
+tuneGrid <- expand.grid(.mtry = best_mtry)
+for (maxnodes in c(5: 15)) {
+    set.seed(1234)
+    rf_maxnode <- train(UNS ~ STG + SCG + STR + LPR + PEG,
+        data = train,
+        method = "rf",
+        metric = "Accuracy",
+        tuneGrid = tuneGrid,
+        trControl = trControl,
+        importance = TRUE,
+        nodesize = 14,
+        maxnodes = maxnodes,
+        ntree = 300)
+    current_iteration <- toString(maxnodes)
+    store_maxnode[[current_iteration]] <- rf_maxnode
+}
+results_mtry <- resamples(store_maxnode)
+summary(results_mtry)
+```
+
+The highest accuracy score is obtained with a value of maxnode equals to 10.
+
+## Search the best ntrees
+```{r}
+store_maxtrees <- list()
+for (ntree in c(50,100,200,250,300,500,700)) {
+    set.seed(5678)
+    rf_maxtrees <- train(UNS ~ STG + SCG + STR + LPR + PEG,
+        data = train,
+        method = "rf",
+        metric = "Accuracy",
+        tuneGrid = tuneGrid,
+        trControl = trControl,
+        importance = TRUE,
+        nodesize = 14,
+        maxnodes = 24,
+        ntree = ntree)
+    key <- toString(ntree)
+    store_maxtrees[[key]] <- rf_maxtrees
+}
+results_tree <- resamples(store_maxtrees)
+summary(results_tree)
+```
+
+We have our final model. We can train the random forest with the following parameters:
+
+ntree =250: 250 trees will be trained
+mtry=4: 4 features is chosen for each iteration
+maxnodes = 10: Maximum 10 nodes in the terminal nodes (leaves)
+
+```{r}
+fit_rf <- train(UNS ~ STG + SCG + STR + LPR + PEG,
+    train,
+    method = "rf",
+    metric = "Accuracy",
+    tuneGrid = tuneGrid,
+    trControl = trControl,
+    importance = TRUE,
+    nodesize = 14,
+    ntree = 250,
+    maxnodes = 10)
+```
+
+```{r}
+prediction <-predict(fit_rf, test)
+```
+
+```{r}
+library(caret)
+cm <- confusionMatrix(as.factor(prediction), as.factor(test$UNS))
+cm[["byClass"]][ , "Sensitivity"]
+```
+
+
+```{r}
+confusionMatrix(prediction, as.factor(test$UNS))
+```
+
+We have an accuracy of 0.931 percent, which is the same as the default value.
+
+```{r}
+library(randomForest)
+rf_ <- randomForest(UNS ~ STG + SCG + STR + LPR + PEG, data=train, ntree=300,keep.forest=FALSE, proximity=TRUE,importance=TRUE)
+varImpPlot(rf_)
+```
+
+## 5.SVM
+
+```{r}
+library(kernlab)
+model1 <- ksvm(as.matrix(train[,1:5]), as.factor(train[,6]), type="C-svc", kernel="vanilladot", C=100, scaled=TRUE)
+model1
+```
+
+```{r}
+model2 <- ksvm(as.matrix(train[,1:5]), as.factor(train[,6]), type="C-svc", kernel="anovadot", C=100, scaled=TRUE)
+model2
+```
+
+```{r}
+model3 <- ksvm(as.matrix(train[,1:5]), as.factor(train[,6]), type="C-svc", kernel="rbfdot", C=100, scaled=TRUE)
+model3
+```
+
+```{r}
+model4 <- ksvm(as.matrix(train[,1:5]), as.factor(train[,6]), type="C-svc", kernel="polydot", C=100, scaled=TRUE)
+model4
+```
+
+```{r}
+pred1 <- predict(model1,test[,1:5])
+pred2 <- predict(model2,test[,1:5])
+pred3 <- predict(model3,test[,1:5])
+pred4 <- predict(model4,test[,1:5])
+```
+
+```{r}
+accuracy1 = sum(pred1 == test[,6]) / nrow(test)
+accuracy1 = signif(accuracy1,3)
+```
+
+```{r}
+accuracy2 = sum(pred2 == test[,6]) / nrow(test)
+accuracy2 = signif(accuracy2,3)
+```
+
+```{r}
+accuracy3 = sum(pred3 == test[,6]) / nrow(test)
+accuracy3 = signif(accuracy3,3)
+```
+
+```{r}
+accuracy4 = sum(pred4 == test[,6]) / nrow(test)
+accuracy4 = signif(accuracy4,3)
+```
+
+```{r}
+x <- data.frame("model"=c('model_1','model_2','model_3','model_4'),"accuracy"=c(accuracy1,accuracy2,accuracy3,accuracy4))
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(x, aes(x = model, y = accuracy, fill = "lightblue"))+
+geom_bar(stat = "identity", position = "dodge")+
+geom_text(aes(label = accuracy), vjust = 1.5, colour = "white", position = position_dodge(.9), size = 5)
+```
+
+```{r}
+library(caret)
+cm <- confusionMatrix(as.factor(pred1), as.factor(test[,6]))
+cm[["byClass"]][ , "Sensitivity"]
+```
+
+```{r}
+library(caret)
+cm <- confusionMatrix(as.factor(pred2), as.factor(test[,6]))
+cm[["byClass"]][ , "Sensitivity"]
+```
+
+```{r}
+library(caret)
+cm <- confusionMatrix(as.factor(pred3), as.factor(test[,6]))
+cm[["byClass"]][ , "Sensitivity"]
+```
+
+```{r}
+library(caret)
+cm <- confusionMatrix(as.factor(pred4), as.factor(test[,6]))
+cm[["byClass"]][ , "Sensitivity"]
+```
+
+## 6. Resample
+
+```{r}
+library(TSdist)
+library(class)
+library(gatbxr)
+library(mclust)
+library(GA)
+load("user_knowledge.rda")
+```
+
+```{r}
+UNS=train$y
+hist(UNS)
+```
+```{r}
+UNS=test$y
+hist(UNS)
+```
+```{r}
+table(train$UNS)
+data(iris)
+data <- iris[, c(1, 2, 5)]
+table(data$Species)
+data$Species <- factor(ifelse(data$Species == "setosa","rare","common")) 
+table(data$Species)
+```
+
+
+```{r}
+library(DMwR)
+data=train[,c(1,2,3,4,5,7)]
+table(data$UNS)
+
+newData <- SMOTE(UNS~ .,data,perc.under = 690, K=3)
+
+table(newData$UNS)
+```
+
+```{r}
+plot(newData)
+```
+
